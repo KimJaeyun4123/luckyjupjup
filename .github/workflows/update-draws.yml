@@ -1,0 +1,34 @@
+name: update-draws
+# 토요일 20:35 KST 추첨 뒤 21:00·22:00·00:00 KST에 새 회차를 받아 data/draws.json 에 붙인다. 변경이 있으면 커밋 → Vercel 자동 배포
+on:
+  schedule:
+    - cron: "0 12 * * 6"
+    - cron: "0 13 * * 6"
+    - cron: "0 15 * * 6"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - id: upd
+        run: |
+          out=$(npm run -s draws:update)
+          echo "$out"
+          echo "result=$out" >> "$GITHUB_OUTPUT"
+      - if: startsWith(steps.upd.outputs.result, 'updated')
+        run: npm run -s rates:build
+      - if: startsWith(steps.upd.outputs.result, 'updated')
+        run: |
+          git config user.name "draws-updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/draws.json data/rates.json
+          git commit -m "회차 데이터 갱신: ${{ steps.upd.outputs.result }}"
+          git push
