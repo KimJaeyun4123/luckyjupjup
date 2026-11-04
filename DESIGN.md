@@ -140,13 +140,14 @@ type Rule =
 | 단계 | 방식 | 법·약관 | 결정 |
 |---|---|---|---|
 | 0 | 번호 만들기 → 저장 → OMR 체크 안내 / 동행복권 모바일(평일 06~24시, 회차 5,000원)에서 직접 입력 | 문제 없음 | **MVP** |
-| 1 | 사용자가 **자기 계정·자기 환경**(GitHub Actions, 집 PC cron)에서 오픈소스 에이전트를 돌리고, 에이전트가 행운줍줍의 **내 목록 URL**(`/api/picks/[token]`, 읽기 전용, 회차별 최대 5게임 JSON)을 받아 수동 번호로 구매 | 영리 대행 아님(사용자 스스로 구매). 다만 동행복권 약관 금지행위(기능 반복 호출)로 **계정 이용 제한 위험**은 사용자 부담 → `/agent`에서 명시 동의 후 토큰 발급 | **v0.2** |
+| 1 | 사용자가 **자기 계정·자기 환경**(GitHub Actions 또는 내 PC launchd)에서 이 저장소의 `scripts/agent/`(`agent:buy`·`agent:report`)를 돌린다. 엔진으로 번호 생성 → HTTP 로그인(RSA) → 예치금 확인 → `execBuy.do` 수동 구매 → 텔레그램 → 토요일 결과 통보. 설계 당시의 '내 목록 URL' 대신 **엔진을 직접 import** 하므로 서버 API 가 필요 없다 | 영리 대행 아님(사용자 스스로 구매). 동행복권 약관 금지행위(기능 반복 호출)로 **계정 이용 제한 위험**은 사용자 부담 → `agent/README.md`에 명시 | **구현 완료 (2026-10-22)** |
 | 2 | 행운줍줍 서버가 사용자 계정으로 로그인해 대신 구매 | 복권법 제6조제4항 위반 소지, 개정안 통과 시 더 강화, 계정·예치금 보관 책임 | **하지 않음** |
 
-Tier 1 세부:
-- 토큰은 브라우저에서 만든 랜덤 32바이트를 URL-safe base64로. 저장은 MVP 범위에선 **URL 자체가 데이터**가 되게 `g`·`r`을 그대로 담은 서명 URL(서버 비밀키 HMAC)로 시작하고, 사용자가 '내 번호'를 바꿀 때마다 새 URL을 만든다. 서버 저장이 필요해지면 Vercel KV에 `token → picks` 만 저장(개인정보 없음).
-- 응답 형식은 kkd927/lotto-purchase-action의 `purchaseManual([[…6개], …])`에 바로 넣을 수 있는 `{"round":1247,"games":[[1,2,3,4,5,6],…]}`. 참고 워크플로 파일(`examples/agent/github-action.yml`)을 제공하되, 에이전트 코드 자체는 외부 오픈소스를 가리킨다.
-- 안내 문구: 금요일 실행 권장(토요일 접속 폭주), 예치금 선충전(1일 15만원 한도), 로그인 5회 실패 시 잠금, 사이트 개편 시 깨질 수 있음, 결과 책임은 사용자.
+Tier 1 세부 (`scripts/agent/`, 상세는 `agent/README.md`):
+- 동행복권 비공식 HTTP 흐름(2026-10 공개 오픈소스 구현들과 같은 경로): `/login/selectRsaModulus.do` → PKCS#1 RSA 로 아이디·비밀번호 암호화 → `/login/securityLoginCheck.do`; 예치금 `/mypage/selectUserMndp.do`; 구매는 `ol.dhlottery.co.kr/olotto/game/egovUserReadySocket.json`(direct) + `game645.do` 숨은 값(curRound·ROUND_DRAW_DATE·WAMT_PAY_TLMT_END_DT) + `execBuy.do`(param = `[{genType:"1", arrGameChoiceNum:"1,2,3,4,5,6", alpabet:"A"}…]`, saleMdaDcd 10); 구매내역·당첨 `/mypage/selectMyLotteryledger.do`(ltGdsCd LO40).
+- 브라우저 없이 Node `https` + 자체 쿠키 통(단일 keep-alive 소켓으로 직렬화; Next 서버 안의 fetch/undici 는 간헐적 연결 시간 초과가 있었다). 응답은 모두 검증하고 원문을 `agent/state.json`에 남긴다. 수동 파라미터는 2026-10-22 실구매(1247회 1게임, 웹 `/api/dh/buy`)로 확정했다. 구매내역 `gmInfo`는 바코드(5자리×6)다.
+- 안전장치: 같은 회차 중복 구매 금지, 판매 시간 검사, 예치금 부족 시 알림만, 로그인 1회 시도(5회 실패 잠금), 드라이런 모드, `/errorPage`·"접속 차단" 감지 시 IP 차단 안내.
+- 예약: GitHub Actions `agent-buy`(금 09:10 KST, 토 10:10 재시도)·`agent-report`(토 21:40·22:40·일 00:40), 또는 Mac launchd. 알림은 텔레그램(HTML). 카카오톡 '나에게 보내기'는 토큰 갱신이 필요해 뒤로 미룸.
 
 ## 8. 당첨 확인·알림
 
@@ -204,4 +205,6 @@ scripts/draws/   update.ts (Action), harvest_all.py filter_stats.py filter_theor
 - 엔진 전부(`features`·`rules`·`presets`·`generate`·`random`·`encode`·`draws`·`rates`·`check`·`schedule`·`picks`)와 단위 테스트 39개, 전체 조합 전수 열거 스크립트(`rates:build`, 약 15초), 주간 갱신 스크립트와 GitHub Action.
 - 화면 `/`, `/pick`, `/pick/result`, `/my`, `/results`, `/results/[round]`(1,246쪽), `/numbers`, `/numbers/[n]`(45쪽), `/stats`, `/check`, `/about`, `/privacy`, 404, robots, sitemap. 빌드 결과 정적 1,308쪽.
 - 설계와 다른 점: 생성은 서버가 아니라 **브라우저에서** 하고 결과를 URL `g`에 담아 `/pick/result`로 이동한다(공유 가능·서버 무기록). `dynamicParams=false`는 Cache Components와 호환되지 않아 뺐고, 없는 회차는 not-found 화면을 200으로 내려 준다(소프트 404).
-- 미구현(v0.2): 규칙 편집기(`/pick/custom`), 에이전트 목록 URL·`/agent`, QR 파싱, .ics, OG 이미지.
+- 자동 구매 에이전트(`scripts/agent/`, 7절 Tier 1) 구현. 웹의 `/api/dh/buy`(드라이런 → 확인 → 구매)로 2026-10-22 첫 실구매 성공.
+- `/dh` 내 동행복권(예치금·구매내역) 화면과 `/api/dh/login|me|logout`. 원칙 2("서버가 계정 정보를 보관하지 않는다")와의 절충: `LOTTO_DH_ENABLED=1`인 로컬·개인 배포에서만 켜지고, 비밀번호는 요청 처리 중에만 존재하며 세션 쿠키만 메모리에 30분 남는다. 공개 배포에서는 켜지 않는다.
+- 미구현(v0.2): 규칙 편집기(`/pick/custom`), QR 파싱, .ics, OG 이미지, 카카오톡 알림.

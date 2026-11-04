@@ -3,7 +3,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Balls } from "@/components/Balls";
 import { FeatureTable, Omr } from "@/components/FeatureTable";
+import { DhBuyButton } from "@/components/DhBuyButton";
 import { ResultActions } from "@/components/ResultActions";
+import { DH_ENABLED } from "@/lib/dh/enabled";
 import { toCtxJson } from "@/lib/lotto/ctxJson";
 import { LATEST, buildContext, historicalPassRate } from "@/lib/lotto/draws";
 import { effectiveRules } from "@/lib/lotto/generate";
@@ -52,6 +54,7 @@ async function Result({ searchParams }: { searchParams: Search }) {
       </div>
 
       <ResultActions preset={p.preset} count={p.count} include={p.include} exclude={p.exclude} games={p.games.map((g) => [...g])} ctx={toCtxJson(ctx)} />
+      {DH_ENABLED && <DhBuyButton games={p.games.map((g) => [...g])} preset={p.preset} />}
 
       <section className="section">
         <h2>게임별 조건값</h2>

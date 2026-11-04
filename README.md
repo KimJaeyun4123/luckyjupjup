@@ -14,6 +14,8 @@ npm run build && npm run start -- -p 3456
 npm run e2e            # 브라우저 E2E (Playwright, 설치된 Google Chrome). 3456에 서버가 떠 있으면 그대로 쓰고 없으면 빌드해서 띄움
 npm run draws:update   # 동행복권에서 새 회차를 받아 data/draws.json 에 붙임 (GitHub Action 이 토요일 밤에 돌림)
 npm run rates:build    # 전체 조합 8,145,060개를 전수 열거해 타입별 비율·분포를 data/rates.json 에 씀 (약 15초)
+npm run agent:buy -- --dry-run   # 자동 구매 에이전트 (개인용, agent/README.md). 번호 생성 → 내 동행복권 계정으로 구매 → 텔레그램
+npm run agent:report             # 추첨 뒤 구매 번호 등수와 누적 수익을 텔레그램으로
 ```
 
 배포: Vercel 프로젝트(루트는 이 저장소)에 연결하면 `main` 푸시마다 자동 배포됩니다. 결과결 쪽 `next.config.ts`에 `/lotto/:path*` → 이 배포로 가는 rewrite 를 추가하면 결과결 도메인의 `/lotto`에서 보입니다. 환경 변수는 필요 없고, 공유 미리보기 주소를 바꾸려면 `NEXT_PUBLIC_SITE_URL`(예: `https://gyulngyul.vercel.app/lotto`)을 둡니다.
@@ -30,6 +32,7 @@ npm run rates:build    # 전체 조합 8,145,060개를 전수 열거해 타입�
 | `/stats` | 타입별 역대 통과율 vs 전체 조합 비율, 합계 분포(역대 vs 이론), 홀짝·고저·연속·AC·끝수·구간·소수 분포 |
 | `/check` | 최근 60회차 중 하나와 번호 6개를 골라 등수 확인 |
 | `/about`, `/privacy` | 하는 일과 하지 않는 일, 조건이 확률을 바꾸지 않는 이유, 데이터 출처, 저장값 지우기 |
+| `/dh` (선택) | 내 동행복권: 아이디·비밀번호로 로그인해 예치금과 최근 30·60·90일 구매·당첨 내역(바코드, '번호 보기'로 게임별 번호·등수)을 보고, 카카오톡 '나에게 보내기'를 연결한다. 결과 화면의 '동행복권에서 바로 구매'(드라이런 → 확인 → 구매)도 이 로그인 세션을 쓴다. `LOTTO_DH_ENABLED=1`인 로컬·개인 배포에서만 열리고 공개 배포에는 메뉴·API(`/api/dh/*`)가 없다. 비밀번호는 로그인 요청에만 쓰고 지우며, 서버 메모리에 동행복권 세션 쿠키만 30분 남는다 |
 
 ## 조건 타입
 
@@ -62,7 +65,9 @@ src/lib/lotto/
   schedule.ts   회차 ↔ 날짜(1회 2002-12-07), 추첨 20:35·마감 20:00 KST, 구매 대상 회차
   picks.ts      localStorage 저장
   compact.ts    클라이언트에 넘기는 최근 60회차 요약
-src/components/ Balls(번호 공), PickForm, ResultActions, MyPicks, CheckForm, FeatureTable·Omr, NextDraw
+src/lib/dh/      동행복권 비공식 HTTP 클라이언트(client.ts: RSA 로그인·예치금·구매·구매내역·티켓), node:https 단일 소켓 클라이언트(http.ts), 세션 메모리(session.ts), 켜기 플래그(enabled.ts), 티켓 파서(ticket.ts)
+src/lib/kakao/   카카오톡 "나에게 보내기" 토큰 저장·갱신(token.ts), 200자 분할 전송(send.ts)
+src/components/ Balls(번호 공), PickForm, ResultActions, MyPicks, CheckForm, FeatureTable·Omr, NextDraw, DhPanel(내 동행복권)
 data/           draws.json (1~최신 회차, 동행복권 공개 결과), rates.json
 scripts/        draws/update.ts (주간 갱신), rates/build.ts, 조사용 Python 스크립트
 .github/workflows/update-draws.yml  토요일 21:00·22:00·00:00 KST 갱신 → 커밋 → Vercel 재배포
@@ -73,6 +78,10 @@ scripts/        draws/update.ts (주간 갱신), rates/build.ts, 조사용 Pytho
 - 회차 결과는 동행복권 사이트(2025~26년 개편)의 내부 JSON 엔드포인트 `GET /lt645/selectPstLt645InfoNew.do?srchLtEpsd=N`(N회부터 10회차)과 `GET /lt645/selectLt645History.do`(최신 회차)에서 받는다. 공식 문서가 없는 비공식 엔드포인트라 주 1회 갱신기에서만 호출하고 사용자 요청 때는 외부 호출이 없다. 널리 알려진 옛 `common.do?method=getLottoNumber`는 더 이상 동작하지 않는다.
 - 갱신기는 번호 6개·보너스·회차 공식과 날짜 일치·등수 데이터를 검증하고, 공개 데이터셋(smok95/lotto)의 최신 회차와 다르면 중단한다.
 - 1~1246회 초기 데이터는 2026-10-22에 수집해 smok95 데이터와 대조했으며 번호·보너스·추첨일 불일치가 없었다.
+
+## 자동 구매 에이전트 (개인용)
+
+`scripts/agent/`는 웹 서비스와 분리된 개인용 스크립트다. 사용자 본인의 동행복권 계정으로, 본인이 관리하는 환경(GitHub Actions 또는 내 PC)에서 금요일에 번호를 만들어 구매하고 토요일에 결과를 텔레그램으로 보낸다. 서버는 관여하지 않고 계정 정보도 그 환경의 비밀 변수에만 있다. 설정·예약·주의사항은 `agent/README.md`.
 
 ## 법·정책 가드레일
 

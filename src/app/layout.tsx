@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
 import { NavLinks } from "@/components/NavLinks";
+import { DH_ENABLED } from "@/lib/dh/enabled";
 import "./globals.css";
 
 const DESCRIPTION = "조건을 골라 로또 6/45 번호를 만들고, 저장해 두면 토요일 추첨 뒤 결과를 알려 주는 무료 서비스";
@@ -36,7 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <BrandMark className="brand-mark" />
               <span className="brand-name">행운줍줍</span>
             </Link>
-            <NavLinks />
+            <NavLinks dh={DH_ENABLED} />
           </div>
         </header>
         <main>

@@ -1,0 +1,49 @@
+name: agent-report
+# 토요일 추첨(20:35 KST) 뒤 21:40·22:40·일요일 00:40 KST 에 새 회차를 받아 구매 번호의 등수를 텔레그램으로 알린다.
+# 결과가 아직 없으면 종료 코드 3 으로 끝나고 다음 예약에서 다시 시도한다. 결과를 보냈으면 draws.json·rates.json·state.json 을 커밋한다.
+on:
+  schedule:
+    - cron: "40 12 * * 6"
+    - cron: "40 13 * * 6"
+    - cron: "40 15 * * 6"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: agent
+  cancel-in-progress: false
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - id: upd
+        run: |
+          out=$(npm run -s draws:update)
+          echo "$out"
+          echo "result=$out" >> "$GITHUB_OUTPUT"
+      - if: startsWith(steps.upd.outputs.result, 'updated')
+        run: npm run -s rates:build
+      - id: report
+        run: npm run -s agent:report
+        continue-on-error: true
+        env:
+          DHLOTTERY_ID: ${{ secrets.DHLOTTERY_ID }}
+          DHLOTTERY_PASSWORD: ${{ secrets.DHLOTTERY_PASSWORD }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          LOTTO_SITE_URL: ${{ vars.LOTTO_SITE_URL }}
+      - name: 데이터·기록 커밋
+        run: |
+          git config user.name "luckyjupjup-agent"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/draws.json data/rates.json agent/state.json
+          git diff --cached --quiet || (git commit -m "회차 데이터·결과 기록 갱신 (${{ steps.upd.outputs.result }})" && git push)
+      - name: 결과 미확정이면 실패로 표시(다음 예약에서 재시도)
+        if: steps.report.outcome == 'failure'
+        run: exit 1

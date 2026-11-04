@@ -1,0 +1,49 @@
+name: agent-buy
+# 금요일 09:10 KST 에 행운줍줍 엔진으로 번호를 만들어 동행복권에서 내 계정으로 구매하고 텔레그램으로 알린다.
+# 실패(예치금 부족 등)하면 토요일 10:10 KST 에 한 번 더 시도한다. 같은 회차를 두 번 사지는 않는다.
+# 필요한 Secrets: DHLOTTERY_ID, DHLOTTERY_PASSWORD, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# 선택 Variables: LOTTO_PRESET(기본 balanced), LOTTO_GAMES(기본 5), LOTTO_FIXED, LOTTO_EXCLUDE, LOTTO_SITE_URL
+on:
+  schedule:
+    - cron: "10 0 * * 5"
+    - cron: "10 1 * * 6"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "드라이런 (구매 요청은 보내지 않음)"
+        type: boolean
+        default: true
+permissions:
+  contents: write
+concurrency:
+  group: agent
+  cancel-in-progress: false
+jobs:
+  buy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run -s agent:buy
+        env:
+          DHLOTTERY_ID: ${{ secrets.DHLOTTERY_ID }}
+          DHLOTTERY_PASSWORD: ${{ secrets.DHLOTTERY_PASSWORD }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          LOTTO_PRESET: ${{ vars.LOTTO_PRESET }}
+          LOTTO_GAMES: ${{ vars.LOTTO_GAMES }}
+          LOTTO_FIXED: ${{ vars.LOTTO_FIXED }}
+          LOTTO_EXCLUDE: ${{ vars.LOTTO_EXCLUDE }}
+          LOTTO_SITE_URL: ${{ vars.LOTTO_SITE_URL }}
+          LOTTO_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '' }}
+      - name: 구매 기록 커밋
+        if: always()
+        run: |
+          git config user.name "luckyjupjup-agent"
+          git config user.email "actions@users.noreply.github.com"
+          git add agent/state.json
+          git diff --cached --quiet || (git commit -m "에이전트: 구매 기록" && git push)

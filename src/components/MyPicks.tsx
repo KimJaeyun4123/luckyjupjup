@@ -48,7 +48,8 @@ export function MyPicks({ recent }: { recent: CompactDraw[] }) {
               <div className="stack-sm" key={p.id}>
                 <div className="pick-head">
                   <span className="small muted">
-                    {presetById(p.presetId)?.name ?? "직접 조건"} · {new Date(p.savedAt).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })} 저장
+                    {presetById(p.presetId)?.name ?? "직접 조건"} · {new Date(p.savedAt).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })} {p.bought ? "구매" : "저장"}
+                    {p.bought && <span className="tag ok" style={{ marginLeft: 6 }}>동행복권 구매</span>}
                   </span>
                   <button type="button" className="btn ghost sm" onClick={() => removePick(p.id)}>지우기</button>
                 </div>

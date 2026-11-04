@@ -10,7 +10,9 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "draws:update": "tsx scripts/draws/update.ts",
-    "rates:build": "tsx scripts/rates/build.ts"
+    "rates:build": "tsx scripts/rates/build.ts",
+    "agent:buy": "tsx scripts/agent/buy.ts",
+    "agent:report": "tsx scripts/agent/report.ts"
   },
   "dependencies": {
     "next": "16.4.0",

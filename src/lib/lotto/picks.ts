@@ -10,6 +10,8 @@ export interface SavedPick {
   presetId: PresetId | "custom";
   /** ISO 시각 */
   savedAt: string;
+  /** 동행복권에서 실제로 구매한 번호 */
+  bought?: boolean;
 }
 
 export const PICKS_KEY = "luckyjupjup:picks";
@@ -35,9 +37,9 @@ function write(list: SavedPick[]) {
   }
 }
 
-export function savePick(round: number, games: readonly Combo[], presetId: SavedPick["presetId"], now = new Date()): SavedPick[] {
+export function savePick(round: number, games: readonly Combo[], presetId: SavedPick["presetId"], now = new Date(), bought = false): SavedPick[] {
   const list = loadPicks();
-  list.unshift({ id: newId(), round, games: games.map((g) => [...g]), presetId, savedAt: now.toISOString() });
+  list.unshift({ id: newId(), round, games: games.map((g) => [...g]), presetId, savedAt: now.toISOString(), ...(bought ? { bought: true } : {}) });
   write(list);
   return list;
 }

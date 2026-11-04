@@ -44,3 +44,7 @@ next-env.d.ts
 # playwright
 /test-results/
 /playwright-report/
+
+# agent logs
+/agent/*.log
+/agent/kakao-token.json
